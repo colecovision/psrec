@@ -1,18 +1,34 @@
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
+/// A symbolic variable whose value may be derived from either
+/// 1. the executable file structure or
+/// 2. data stored inside the executable.
 pub enum UnifyVar {
+    /// A symbol, as identified by its name.
     Symbol(String),
+    /// A section of a specific object file, as identified by its two indices
+    /// (the former being the object file index and the latter the section
+    /// index).
     Section(usize, usize),
+    /// The start of a section in the executable, as identified by its index.
     SecStart(usize),
+    /// The size of a section in the executable, as identified by its index.
     SecSizeBytes(usize),
 }
 
 #[derive(Copy, Clone, Debug)]
+/// The degree of knowledge about the value of a symbolic variable.
 pub enum UnifyState {
-    InRange(u32, u16), // x.0 <= VALUE <= x.0 + x.1
-    Lower16(u16)       // VALUE mod 65536 = x.0
+    /// The value is in the (possibly overflowing) inclusive interval
+    /// starting at the first element, of length equal to the second.
+    InRange(u32, u16),
+    /// The value is known only modulo 65536.
+    Lower16(u16)
 }
 
 impl UnifyState {
+    /// Attempts to merge knowledge about some variable.
+    /// On success, returns a `Some` containing the merged set.
+    /// On failure, returns `None`.
     pub fn unify(self, other: Self) -> Option<Self> {
         use UnifyState::*;
 
@@ -34,7 +50,9 @@ impl UnifyState {
                     None
                 }
             },
+            // modulo is a congruence!
             (Lower16(x), Lower16(y)) => (x == y).then(|| Lower16(x)),
+            // interval + modulo = full information IF COMPATIBLE
             (InRange(l, x), Lower16(y)) | (Lower16(y), InRange(l, x)) => {
                 let delta = y.wrapping_sub(l as u16);
 

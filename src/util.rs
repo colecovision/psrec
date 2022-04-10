@@ -1,5 +1,6 @@
 use std::{borrow::Borrow, ops::Range};
 
+/// A trait made to simplify parsing of binary blobs.
 pub trait LeBytes<const N: usize> {
     fn from_le(x: [u8; N]) -> Self;
     fn to_le(self) -> [u8; N];
@@ -35,7 +36,10 @@ impl LeBytes<2> for u16 {
     }
 }
 
-pub fn obtain_le<T, U, V, const N: usize>(x: U) -> T where T: LeBytes<N>, U: IntoIterator<Item = V>, V: Borrow<u8> {
+/// More ergonomic way to read `N` bytes from a `&[u8]` slice
+/// et simila and get an integer back.
+pub fn obtain_le<T, U, V, const N: usize>(x: U) -> T
+where T: LeBytes<N>, U: IntoIterator<Item = V>, V: Borrow<u8> {
     let mut y = [0; N];
     y.iter_mut().zip(x).for_each(|(w, r)| *w = *r.borrow());
     <T as LeBytes<N>>::from_le(y)
@@ -44,6 +48,11 @@ pub fn obtain_le<T, U, V, const N: usize>(x: U) -> T where T: LeBytes<N>, U: Int
 
 
 #[derive(Clone, Debug)]
+/// Theoretically a diet (discrete interval encoding tree).
+/// In practice, the benefits of such a structure are not terribly relevant
+/// here, as most instances will rarely hold more than a handful of intervals;
+/// the name has stuck. May be replaced by an actual Diet implementation at
+/// some point.
 pub struct Diet(Vec<(u32, u32)>);
 
 impl Default for Diet {
@@ -57,6 +66,7 @@ impl Diet {
         self.0.len() == 0
     }
 
+    /// The least interval that covers all intervals contained in `self`.
     pub fn radius(&self) -> Range<u32> {
         if let Some(&(l, _)) = self.0.first() {
             l .. self.0.last().unwrap().1
@@ -65,6 +75,7 @@ impl Diet {
         }
     }
 
+    /// Check if interval `elem` is contained in `self`.
     pub fn intersects(&self, elem: (u32, u32)) -> bool {
         match self.0.binary_search_by_key(&elem.0, |x| x.0) {
             Ok(_) => true,
@@ -72,6 +83,8 @@ impl Diet {
         }
     }
 
+    /// Try to insert `elem` in `self`. Returns `true` if all is good, and
+    /// `false` if the interval was already present.
     pub fn insert(&mut self, elem: (u32, u32)) -> bool {
         match self.0.binary_search_by_key(&elem.0, |x| x.0) {
             Ok(_) => false,
@@ -95,6 +108,7 @@ impl Diet {
         }
     }
 
+    /// Check if the two `Self`s are disjoint.
     pub fn is_disjoint(&self, other: &Diet) -> bool {
         let mut i = 0;
         let mut j = 0;
@@ -112,8 +126,10 @@ impl Diet {
         true
     }
 
-    // quick and dirty
+    /// Join the two `Self`s into `self`.
     pub fn join(&mut self, other: Diet) {
+        // quick and dirty merging
+
         let mut i = 0;
         let mut j = 0;
 
@@ -153,10 +169,13 @@ impl Diet {
         }
     }
 
+    /// Get all intervals inside `self` as a slice.
+    // Should probably make this into an iterator.
     pub fn ranges(&self) -> &[(u32, u32)] {
         &self.0[..]
     }
 
+    /// Convert `self` to a `Vec` of intervals.
     pub fn as_vec(self) -> Vec<(u32, u32)> {
         self.0
     }
