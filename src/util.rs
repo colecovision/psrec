@@ -38,7 +38,7 @@ impl LeBytes<2> for u16 {
 
 /// More ergonomic way to read `N` bytes from a `&[u8]` slice
 /// et simila and get an integer back.
-pub fn obtain_le<T, U, V, const N: usize>(x: U) -> T
+pub fn obtain_le<T, const N: usize, U, V>(x: U) -> T
 where T: LeBytes<N>, U: IntoIterator<Item = V>, V: Borrow<u8> {
     let mut y = [0; N];
     y.iter_mut().zip(x).for_each(|(w, r)| *w = *r.borrow());

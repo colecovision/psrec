@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-use crate::parser::{Block, Section, PatchKind};
+use crate::front::{Block, Section, PatchKind};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Mask {

@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    parser::{ObjectData, Section, Expr, PatchKind},
+    front::{ObjectData, Section, Expr, PatchKind},
     pattern::LinkPat,
     unif::{UnifyVar, UnifyState},
     util::{Diet, obtain_le}

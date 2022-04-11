@@ -38,7 +38,7 @@ pub fn parse_exe(data: &[u8]) -> Result<Executable, String> {
 	Ok(Executable {
 		pc0: obtain_le(&head[16..]),
 		gp0: obtain_le(&head[20..]),
-		text: (obtain_le(&head[24..]), Box::from(&data[..obtain_le::<u32, _, _, 4>(&head[28..]) as usize])),
+		text: (obtain_le(&head[24..]), Box::from(&data[..obtain_le::<u32, 4, _, _>(&head[28..]) as usize])),
 		bss: b_addr .. b_addr + b_size,
 		stack: s_addr .. s_addr + s_size
 	})
@@ -270,7 +270,7 @@ pub fn parse_object(data: &[u8]) -> Result<ObjectData, String> {
 	                }
 
 	                let (len, _rest) = _rest.split_at(2);
-	                let len = obtain_le::<u16, _, _, 2>(len) as usize;
+	                let len = obtain_le::<u16, 2, _, _>(len) as usize;
 
 	                if len == 0 {
 	                    return Err("Invalid length for code block tag".to_string());
@@ -409,7 +409,7 @@ pub fn parse_object(data: &[u8]) -> Result<ObjectData, String> {
 	                                (Expr::SymbolMinus(obtain_le(&data[1..]), obtain_le(&data[4..])), _rest)
 	                            } else if _rest.len() >= 8 && _rest[0] == 0 && _rest[5] == 2 {
 	                                let (data, _rest) = _rest.split_at(8);
-	                                (Expr::SymbolPlus(obtain_le(&data[6..]), -obtain_le::<i32, _, _, 4>(&data[1..]) as u32), _rest)
+	                                (Expr::SymbolPlus(obtain_le(&data[6..]), -obtain_le::<i32, 4, _, _>(&data[1..]) as u32), _rest)
 	                            } else if _rest.len() >= 6 && _rest[0] == 12 && _rest[3] == 22 && _rest[1..3] == _rest[4..6] {
 	                                let (data, _rest) = _rest.split_at(6);
 	                                (Expr::SectionBytes(obtain_le(&data[1..])), _rest)
@@ -762,8 +762,8 @@ fn parse_file(data: &[u8]) -> Result<(ObjectFile, &[u8]), String> {
 	}
 
 	let (header, rest) = data.split_at(20);
-	let header_len = obtain_le::<u32, _, _, 4>(&header[12..]) as usize;
-	let total_len  = obtain_le::<u32, _, _, 4>(&header[16..]) as usize;
+	let header_len = obtain_le::<u32, 4, _, _>(&header[12..]) as usize;
+	let total_len  = obtain_le::<u32, 4, _, _>(&header[16..]) as usize;
 
 	if header_len >= total_len {
 		return Err("Header length greater than total length".to_string());

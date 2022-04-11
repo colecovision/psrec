@@ -9,12 +9,12 @@ use std::{
 
 use iced::*;
 
-mod parser;
+mod front;
 mod util;
 mod pattern;
 mod unif;
 mod extract;
-use parser::{parse_exe, parse_object, parse, Processor, Executable, ObjectData, Block};
+use front::{parse_exe, parse_object, parse, Processor, Executable, ObjectData, Block};
 use pattern::LinkPat;
 use unif::{UnifyVar, UnifyState};
 use extract::{extract_syms, Instance};
