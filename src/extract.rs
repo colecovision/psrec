@@ -104,10 +104,6 @@ impl Instance {
         &self.syms
     }
 
-    pub fn contains(&self, var: &UnifyVar) -> bool {
-        self.syms.contains_key(var)
-    }
-
     pub fn insert(&mut self, ext: (u32, u32), syms: HashMap<UnifyVar, UnifyState>) -> bool {
         for (k, v) in syms {
             let uv = self.syms.entry(k).or_insert(v.clone());

@@ -14,14 +14,14 @@ mod util;
 mod pattern;
 mod unif;
 mod extract;
-use front::{parse_exe, parse_object, parse, Processor, Executable, ObjectData, Block};
+use front::{Library, Processor, Executable, ObjectData, Block};
 use pattern::LinkPat;
 use unif::{UnifyVar, UnifyState};
 use extract::{extract_syms, Instance};
 
 
-static mut objs: Vec<(String, ObjectData)> = Vec::new();
-static mut secs: Vec<String> = Vec::new();
+static mut OBJS: Vec<(String, ObjectData)> = Vec::new();
+static mut SECS: Vec<String> = Vec::new();
 
 
 pub fn main() -> iced::Result {
@@ -53,7 +53,7 @@ pub fn main() -> iced::Result {
                     }
                 };
 
-                match parse_exe(&data) {
+                match Executable::parse(&data) {
                     Ok(exe) => {
                         println!("{} parsed OK!", name);
                         exec = Some((name, exe));
@@ -79,11 +79,11 @@ pub fn main() -> iced::Result {
                     }
                 };
 
-                match parse_object(&data) {
+                match ObjectData::parse(&data) {
                     Ok(obj) => {
                         println!("{} parsed OK!", name);
-                        unsafe { objs.push((name, obj)); }
-                    },
+                        unsafe { OBJS.push((name, obj)); }
+	                },
                     Err(e) => println!("Error while parsing {}: {}", name, e)
                 }
             },
@@ -105,11 +105,11 @@ pub fn main() -> iced::Result {
                     }
                 };
 
-                match parse(&data) {
+                match Library::parse(&data) {
                     Ok(lib) => {
                         println!("{} parsed OK!", name);
 
-                        unsafe { objs.extend(lib.files.into_iter()
+                        unsafe { OBJS.extend(lib.files.into_iter()
                                              .map(|file| (
                             format!("{}/{}.OBJ", name, std::str::from_utf8(&file.name).unwrap().trim_end()),
                             file.cont
@@ -122,7 +122,7 @@ pub fn main() -> iced::Result {
     }
 
     if !no_dump {
-        for (name, file) in unsafe { objs.iter() } {
+        for (name, file) in unsafe { OBJS.iter() } {
             println!("\t{}", name);
 
             println!("\t\tproc: {}", match file.proc {
@@ -163,13 +163,13 @@ pub fn main() -> iced::Result {
     }
 
     if let Some((name, exe)) = exec {
-        for (_, file) in unsafe { objs.iter() } {
+        for (_, file) in unsafe { OBJS.iter() } {
             for sec in &file.secs {
-                if unsafe { secs.contains(&sec.name) } {
+                if unsafe { SECS.contains(&sec.name) } {
                     continue;
                 }
 
-                unsafe { secs.push(sec.name.clone()); }
+                unsafe { SECS.push(sec.name.clone()); }
             }
         }
 
@@ -208,7 +208,7 @@ fn instance_repr(inst: &Instance) -> String {
                      .collect::<String>();
 
     let incls = inst.incl().iter()
-                    .map(|&x| format!("\n∙ {}", unsafe { &objs[x].0 }))
+                    .map(|&x| format!("\n∙ {}", unsafe { &OBJS[x].0 }))
                     .collect::<String>();
 
     let mut syms = inst.syms().iter().map(|(uv, us)| format!("{} {}",
@@ -219,9 +219,9 @@ fn instance_repr(inst: &Instance) -> String {
         },
         match uv {
             UnifyVar::Symbol(s) => s.clone(),
-            &UnifyVar::Section(obj, sec) => format!("{}/{}", unsafe { &objs[obj].0 }, unsafe { &secs[sec] }),
-            &UnifyVar::SecStart(sec) => format!("_START({})", unsafe { &secs[sec] }),
-            &UnifyVar::SecSizeBytes(sec) => format!("_SIZEOF({})", unsafe { &secs[sec] })
+            &UnifyVar::Section(obj, sec) => format!("{}/{}", unsafe { &OBJS[obj].0 }, unsafe { &SECS[sec] }),
+            &UnifyVar::SecStart(sec) => format!("_START({})", unsafe { &SECS[sec] }),
+            &UnifyVar::SecSizeBytes(sec) => format!("_SIZEOF({})", unsafe { &SECS[sec] })
         },
     )).collect::<Vec<_>>();
     syms.sort();
@@ -257,24 +257,14 @@ impl Application for MainGui {
             incl.insert(i);
             poss.push(Instance::new(incl));
 
-            let sec_tl = |s: &str| unsafe { secs.iter() }.position(|x| x == s)
+            let sec_tl = |s: &str| unsafe { SECS.iter() }.position(|x| x == s)
                                                          .unwrap();
-
-            let debug = unsafe { &objs[i].0 } == r"J:\I\Vib Ribbon\custom\LIBETC.LIB/INTR.OBJ"; // r"J:\I\Vib Ribbon\custom\LIBGPU.LIB/SYS.OBJ";
-
-            if debug {
-                println!("CHECKING FOR INCRIMINATING FILE");
-            }
 
             for sec in &file.secs {
                 let pat = LinkPat::section(sec, flags.2);
                 let id = sec_tl(&sec.name);
 
-                if debug { println!("\tCHECKING SECTION {}", sec.name); }
-
                 if !pat.usable() {
-                    if debug { println!("\t\tUNUSABLE"); }
-
                     if !pat.is_empty() {
                         check_later.insert(id);
                     }
@@ -289,8 +279,6 @@ impl Application for MainGui {
                                        &exe.text.1[pos..pos + pat.len()],
                                        &pat, sec, file, id, i, sec_tl)
                 ) {
-                    if debug { println!("\t\tFOUND AT ({}, {}): {:?}", e.0, e.1, s); }
-
                     for ins in &poss {
                         let mut ins = ins.clone();
 
@@ -299,8 +287,6 @@ impl Application for MainGui {
                         }
                     }
                 }
-
-                if debug { println!("\t\tTOTAL: {} -> {:?}", poss.len(), new_poss); }
 
                 poss = new_poss;
 
@@ -334,7 +320,7 @@ impl Application for MainGui {
                             _ => unimplemented!("fuzzy rescan")
                         };
 
-                        let sec = file.sec_by_name(unsafe { &secs[sec_check] }).unwrap();
+                        let sec = file.sec_by_name(unsafe { &SECS[sec_check] }).unwrap();
                         let pat = LinkPat::section(sec, flags.2);
                         let off = (pos - exe.text.0) as usize;
 
@@ -387,8 +373,8 @@ impl Application for MainGui {
             GuiMessage::Extracted(poss)
         };
 
-        (out, Command::batch((0..unsafe { objs.len() }).map(
-            |i| Command::perform(ready((i, unsafe { &objs[i].1 })), run.clone())
+        (out, Command::batch((0..unsafe { OBJS.len() }).map(
+            |i| Command::perform(ready((i, unsafe { &OBJS[i].1 })), run.clone())
         )))
     }
 
@@ -424,12 +410,12 @@ impl Application for MainGui {
                 if self.full.compatible(&self.insts[sel]) {
                     let obj = *self.insts[sel].incl().iter().next().unwrap();
 
-                    self.orphans.extend(unsafe { objs[obj].1.refs.iter() }.filter_map(|r| {
+                    self.orphans.extend(unsafe { OBJS[obj].1.refs.iter() }.filter_map(|r| {
                         let real_r = r.name.trim_start_matches('\0');
                         (!self.defined.contains(real_r)).then(|| real_r.to_string())
                     }));
 
-                    for sec in unsafe { &objs[obj].1.secs } {
+                    for sec in unsafe { &OBJS[obj].1.secs } {
                         sec.defs.iter().for_each(|d| {
                             self.orphans.remove(&d.name);
                         });
@@ -651,7 +637,7 @@ impl BlockView {
 
         let mut wait = Vec::new();
 
-        for (id, _, range, status, rect, idx) in &mut self.ranges {
+        for (_, _, range, _, rect, idx) in &mut self.ranges {
             *idx = match wait.iter().position(|x| x <= &range.start) {
                 Some(pos) => {
                     wait[pos] = range.end;

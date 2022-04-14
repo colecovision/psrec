@@ -75,14 +75,6 @@ impl Diet {
         }
     }
 
-    /// Check if interval `elem` is contained in `self`.
-    pub fn intersects(&self, elem: (u32, u32)) -> bool {
-        match self.0.binary_search_by_key(&elem.0, |x| x.0) {
-            Ok(_) => true,
-            Err(i) => i < self.0.len() && elem.1 >= self.0[i].0 || i > 0 && elem.0 <= self.0[i - 1].1
-        }
-    }
-
     /// Try to insert `elem` in `self`. Returns `true` if all is good, and
     /// `false` if the interval was already present.
     pub fn insert(&mut self, elem: (u32, u32)) -> bool {
@@ -173,10 +165,5 @@ impl Diet {
     // Should probably make this into an iterator.
     pub fn ranges(&self) -> &[(u32, u32)] {
         &self.0[..]
-    }
-
-    /// Convert `self` to a `Vec` of intervals.
-    pub fn as_vec(self) -> Vec<(u32, u32)> {
-        self.0
     }
 }
