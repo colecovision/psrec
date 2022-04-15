@@ -715,8 +715,6 @@ impl canvas::Program<GuiMessage> for BlockView {
                 frame.fill_rectangle(tl, sz, col);
             }
 
-            frame.fill_text(format!("{:?}\n{} + {}", bounds, self.start, self.size));
-
             let lwm = self.defs.partition_point(|&x| x < self.start);
             let hwm = self.defs.partition_point(|&x| x <= self.start + self.size);
 
