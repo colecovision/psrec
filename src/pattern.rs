@@ -1,4 +1,7 @@
-use std::cmp::Ordering;
+use std::{
+    cmp::Ordering,
+    iter::FusedIterator
+};
 
 use crate::front::{Block, Section, PatchKind};
 
@@ -170,7 +173,5 @@ impl<T: PartialOrd<Mask>> Iterator for FindIter<'_, '_, T> {
         None
     }
 }
-
-use std::iter::FusedIterator;
 
 impl<T: PartialOrd<Mask>> FusedIterator for FindIter<'_, '_, T> {}

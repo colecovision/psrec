@@ -171,8 +171,8 @@ impl TryFrom<u8> for PatchKind {
 
 macro_rules! check_size {
 	($var:expr, $size:literal, $tag:literal) => {
-		($var.len() < $size).then(|| $var.split_at($size))
-		                    .ok_or(concat!("Truncated ", $tag, " tag"))?
+		($var.len() >= $size).then(|| $var.split_at($size))
+		                     .ok_or(concat!("Truncated ", $tag, " tag"))?
 	}
 }
 
