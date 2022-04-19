@@ -1,4 +1,7 @@
-use std::hint;
+use std::{
+    collections::HashMap,
+    hint
+};
 
 use crate::util::obtain_le;
 use super::expr::Expr;
@@ -9,46 +12,38 @@ pub struct ObjectData {
 	/// Processor type, if any, for this object file.
 	/// If .text content is available, must be 7.
 	pub proc: Option<Processor>,
-	/// List of sections present in the object file.
-	pub secs: Vec<Section>,
-	/// List of external references to symbols.
-	pub refs: Vec<ExtRef>,
-	/// List of files that contributed to this object.
-	pub files: Vec<FileName>,
+	/// Map from section indices to sections present in the object file.
+	pub secs: HashMap<u16, Section>,
+	/// Map from symbol indices to external references to symbols.
+	pub refs: HashMap<u16, String>,
+	/// Map from file indices to files that contributed to this object.
+	pub files: HashMap<u16, String>,
 }
 
 impl ObjectData {
 	pub fn sec_by_idx(&self, idx: u16) -> Option<&Section> {
-		self.secs.iter().filter(|x| x.idx == idx).next()
-	}
-
-	fn sec_by_idx_mut(&mut self, idx: u16) -> Option<&mut Section> {
-		self.secs.iter_mut().filter(|x| x.idx == idx).next()
+        self.secs.get(&idx)
 	}
 
 	pub fn sec_by_name(&self, name: &str) -> Option<&Section> {
-		self.secs.iter().filter(|x| x.name == name).next()
+		self.secs.values().filter(|x| x.name == name).next()
 	}
 
 	fn has_sym_by_idx(&self, idx: u16) -> bool {
-		self.refs.iter().any(|x| x.idx == idx) || self.secs.iter().any(|x| x.def_by_idx(idx).is_some())
-	                                           || self.secs.iter().any(|x| x.bss_by_idx(idx).is_some())
+		self.refs.contains_key(&idx) || self.secs.values().any(|x| x.def_by_idx(idx).is_some())
+	                                 || self.secs.values().any(|x| x.bss_by_idx(idx).is_some())
 	}
 
 	fn has_sym_by_name(&self, name: &str) -> bool {
-		self.refs.iter().any(|x| x.name == name) || self.secs.iter().any(|x| x.def_by_name(name).is_some())
-	                                             || self.secs.iter().any(|x| x.bss_by_name(name).is_some())
+		self.refs.values().any(|x| x == name) || self.secs.values().any(|x| x.def_by_name(name).is_some())
+	                                          || self.secs.values().any(|x| x.bss_by_name(name).is_some())
 	}
 
 	pub fn sym_name_from_idx(&self, idx: u16) -> Option<&str> {
-	    self.refs.iter().find_map(|x| (x.idx == idx).then(|| &x.name)).or_else(||
-	        self.secs.iter().find_map(|x| x.def_by_idx(idx).map(|x| &x.name)
-	                                       .or_else(|| x.bss_by_idx(idx).map(|x| &x.name)))
+	    self.refs.get(&idx).or_else(||
+	        self.secs.values().find_map(|x| x.def_by_idx(idx).map(|x| &x.name)
+	                                         .or_else(|| x.bss_by_idx(idx).map(|x| &x.name)))
 	    ).map(|x| x.as_str())
-	}
-
-	fn has_file(&self, idx: u16) -> bool {
-	    self.files.iter().any(|x| x.idx == idx)
 	}
 }
 
@@ -85,23 +80,7 @@ impl TryFrom<u8> for Processor {
 	}
 }
 
-pub struct FileName {
-	/// File index.
-	idx: u16,
-	/// File name.
-	pub name: String
-}
-
-pub struct ExtRef {
-	/// Symbol index.
-	idx: u16,
-	/// Symbol name.
-	pub name: String
-}
-
 pub struct Section {
-	/// Section index.
-	idx: u16,
 	/// Section group.
 	_grp: u16,
 	/// Section alignment, in bytes.
@@ -231,9 +210,9 @@ impl ObjectData {
 
         let mut out = ObjectData {
             proc: None,
-            secs: Vec::new(),
-            refs: Vec::new(),
-            files: Vec::new()
+            secs: HashMap::new(),
+            refs: HashMap::new(),
+            files: HashMap::new()
         };
 
         let mut curr = None;
@@ -266,7 +245,7 @@ impl ObjectData {
 
 					let idx = curr.ok_or("Code block with no selected section")?;
 
-					out.sec_by_idx_mut(idx)
+					out.secs.get_mut(&idx)
 					   .unwrap_or_else(|| unsafe { hint::unreachable_unchecked() })
 					   .blocks
 					   .push(Block::Code(Box::from(data)));
@@ -277,7 +256,7 @@ impl ObjectData {
 					let (idx, _rest) = check_size!(_rest, 2, "section select");
 					let idx = obtain_le(idx);
 
-					if out.sec_by_idx(idx).is_none() {
+					if !out.secs.contains_key(&idx) {
 						return Err("Undefined section selected".to_string());
 					}
 
@@ -294,7 +273,7 @@ impl ObjectData {
 
 					let idx = curr.ok_or("Uninit block with no selected section")?;
 					
-					out.sec_by_idx_mut(idx)
+					out.secs.get_mut(&idx)
 					   .unwrap_or_else(|| unsafe { hint::unreachable_unchecked() })
 					   .blocks
 					   .push(Block::Uninit(size));
@@ -309,7 +288,7 @@ impl ObjectData {
 
 					let idx = curr.ok_or("Patch with no selected section")?;
 
-					out.sec_by_idx_mut(idx)
+					out.secs.get_mut(&idx)
 					   .unwrap_or_else(|| unsafe { hint::unreachable_unchecked() })
 					   .patches
 					   .push(Patch {
@@ -342,7 +321,7 @@ impl ObjectData {
 						return Err("Two symbols with same name".to_string());
 					}
 
-					let sec = out.sec_by_idx_mut(obtain_le(&head[2..]))
+					let sec = out.secs.get_mut(&obtain_le(&head[2..]))
 					             .ok_or("Extdef for yet undefined section")?;
 
 					sec.defs.push(ExtDef {
@@ -374,10 +353,7 @@ impl ObjectData {
 						return Err("Two symbols with same name".to_string());
 					}
 
-					out.refs.push(ExtRef {
-						idx,
-						name
-					});
+					out.refs.insert(idx, name);
 
 					_rest
 				},
@@ -385,9 +361,9 @@ impl ObjectData {
 					let (head, _rest) = check_size!(_rest, 6, "section");
 					let idx = obtain_le(head);
 
-					if out.sec_by_idx(idx).is_some() {
-						return Err("Two sections with same index".to_string());
-					}
+                    if out.secs.contains_key(&idx) {
+                        return Err("Two sections with same index".to_string());
+                    }
 
 					let grp = obtain_le(&head[2..]);
 					let align = head[4];
@@ -403,8 +379,7 @@ impl ObjectData {
 					out.sec_by_name(&name)
 					   .ok_or("Two sections with same name")?;
 
-					out.secs.push(Section {
-						idx,
+					out.secs.insert(idx, Section {
 						_grp: grp,
 						align,
 						name,
@@ -430,7 +405,7 @@ impl ObjectData {
 					let (name, _rest) = _rest.split_at(len);
 					let name = String::from_utf8(Vec::from(name)).map_err(|_| "Invalid locdef name data".to_string())?;
 
-					let sec = out.sec_by_idx_mut(obtain_le(head))
+					let sec = out.secs.get_mut(&obtain_le(head))
 					             .ok_or("Locdef for yet undefined section")?;
 
 					sec.locs.push(LocDef {
@@ -444,7 +419,7 @@ impl ObjectData {
 					let (head, _rest) = check_size!(_rest, 3, "file");
 					let idx = obtain_le(head);
 
-					if out.has_file(idx) {
+					if out.files.contains_key(&idx) {
 						return Err("Two files with same index".to_string());
 					}
 
@@ -457,10 +432,7 @@ impl ObjectData {
 					let (name, _rest) = _rest.split_at(len);
 					let name = String::from_utf8(Vec::from(name)).map_err(|_| "Invalid file name data".to_string())?;
 
-					out.files.push(FileName {
-						idx,
-						name
-					});
+					out.files.insert(idx, name);
 
 					_rest
 				},
@@ -496,7 +468,7 @@ impl ObjectData {
 						return Err("Two symbols with same name".to_string());
 					}
 
-					let sec = out.sec_by_idx_mut(obtain_le(&head[2..]))
+					let sec = out.secs.get_mut(&obtain_le(&head[2..]))
 								 .ok_or("Extbss for yet undefined section")?;
 
 					sec.bss.push(ExtBss {

@@ -131,15 +131,15 @@ pub fn main() -> iced::Result {
                 Some(Processor::R4K5K) => "MIPS R4000 and R5000"
             });
 
-            for file in &file.files {
-                println!("\t\tsource: {}", file.name);
+            for file in file.files.values() {
+                println!("\t\tsource: {}", file);
             }
 
-            for extref in &file.refs {
-                println!("\t\textref: {}", extref.name);
+            for extref in file.refs.values() {
+                println!("\t\textref: {}", extref);
             }
 
-            for sec in &file.secs {
+            for sec in file.secs.values() {
                 println!("\t\tsec: {}, size {}", sec.name, sec.blocks.iter().map(Block::len).sum::<usize>()
                                                          + sec.bss.iter().map(|b| b.size as usize).sum::<usize>());
 
@@ -156,7 +156,7 @@ pub fn main() -> iced::Result {
 
     if let Some((name, exe)) = exec {
         for (_, file) in unsafe { OBJS.iter() } {
-            for sec in &file.secs {
+            for sec in file.secs.values() {
                 if unsafe { SECS.contains(&sec.name) } {
                     continue;
                 }

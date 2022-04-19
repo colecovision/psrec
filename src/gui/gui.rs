@@ -99,7 +99,7 @@ impl Application for MainGui {
             let sec_tl = |s: &str| unsafe { SECS.iter() }.position(|x| x == s)
                                                          .unwrap();
 
-            for sec in &file.secs {
+            for sec in file.secs.values() {
                 let pat = LinkPat::section(sec, flags.2);
                 let id = sec_tl(&sec.name);
 
@@ -249,12 +249,12 @@ impl Application for MainGui {
                 if self.full.compatible(&self.insts[sel]) {
                     let obj = *self.insts[sel].incl().iter().next().unwrap();
 
-                    self.orphans.extend(unsafe { OBJS[obj].1.refs.iter() }.filter_map(|r| {
-                        let real_r = r.name.trim_start_matches('\0');
+                    self.orphans.extend(unsafe { OBJS[obj].1.refs.values() }.filter_map(|r| {
+                        let real_r = r.trim_start_matches('\0');
                         (!self.defined.contains(real_r)).then(|| real_r.to_string())
                     }));
 
-                    for sec in unsafe { &OBJS[obj].1.secs } {
+                    for sec in unsafe { &OBJS[obj].1.secs }.values() {
                         sec.defs.iter().for_each(|d| {
                             self.orphans.remove(&d.name);
                         });
