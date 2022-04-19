@@ -19,7 +19,7 @@ pub fn extract_syms<F: Fn(&str) -> usize>(
 
     syms.insert(UnifyVar::Section(name, id), UnifyState::InRange(offset, 0));
 
-    for def in &sec.defs {
+    for def in sec.defs.values() {
         syms.insert(UnifyVar::Symbol(def.name.clone()), UnifyState::InRange(offset + def.off, 0));
     }
 

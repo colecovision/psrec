@@ -255,15 +255,15 @@ impl Application for MainGui {
                     }));
 
                     for sec in unsafe { &OBJS[obj].1.secs }.values() {
-                        sec.defs.iter().for_each(|d| {
+                        sec.defs.values().for_each(|d| {
                             self.orphans.remove(&d.name);
                         });
-                        self.defined.extend(sec.defs.iter().map(|d| d.name.clone()));
+                        self.defined.extend(sec.defs.values().map(|d| d.name.clone()));
 
-                        sec.bss.iter().for_each(|b| {
+                        sec.bss.values().for_each(|b| {
                             self.orphans.remove(&b.name);
                         });
-                        self.defined.extend(sec.bss.iter().map(|b| b.name.clone()));
+                        self.defined.extend(sec.bss.values().map(|b| b.name.clone()));
                     }
 
                     self.full.join(self.insts[sel].clone());

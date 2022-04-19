@@ -30,19 +30,21 @@ impl ObjectData {
 	}
 
 	fn has_sym_by_idx(&self, idx: u16) -> bool {
-		self.refs.contains_key(&idx) || self.secs.values().any(|x| x.def_by_idx(idx).is_some())
-	                                 || self.secs.values().any(|x| x.bss_by_idx(idx).is_some())
+		   self.refs.contains_key(&idx)
+        || self.secs.values().any(|x| x.defs.contains_key(&idx))
+	    || self.secs.values().any(|x| x.bss.contains_key(&idx))
 	}
 
 	fn has_sym_by_name(&self, name: &str) -> bool {
-		self.refs.values().any(|x| x == name) || self.secs.values().any(|x| x.def_by_name(name).is_some())
-	                                          || self.secs.values().any(|x| x.bss_by_name(name).is_some())
+		   self.refs.values().any(|x| x == name)
+        || self.secs.values().any(|x| x.defs.values().any(|x| x.name == name))
+	    || self.secs.values().any(|x| x.bss.values().any(|x| x.name == name))
 	}
 
 	pub fn sym_name_from_idx(&self, idx: u16) -> Option<&str> {
 	    self.refs.get(&idx).or_else(||
-	        self.secs.values().find_map(|x| x.def_by_idx(idx).map(|x| &x.name)
-	                                         .or_else(|| x.bss_by_idx(idx).map(|x| &x.name)))
+	        self.secs.values().find_map(|x| x.defs.get(&idx).map(|x| &x.name)
+	                             .or_else(|| x.bss.get(&idx).map(|x| &x.name)))
 	    ).map(|x| x.as_str())
 	}
 }
@@ -91,35 +93,15 @@ pub struct Section {
 	pub blocks: Vec<Block>,
 	/// List of patches for section.
 	pub patches: Vec<Patch>,
-	/// List of external defines defined in this section.
-	pub defs: Vec<ExtDef>,
-	/// List of external BSS areas defined in this section.
-	pub bss: Vec<ExtBss>,
+	/// Map from symbol indices to external defines defined in this section.
+	pub defs: HashMap<u16, ExtDef>,
+	/// Map from symbols indices to external BSS areas defined in this section.
+	pub bss: HashMap<u16, ExtBss>,
 	/// List of local defines defined in this section.
 	locs: Vec<LocDef>
 }
 
-impl Section {
-	fn def_by_idx(&self, idx: u16) -> Option<&ExtDef> {
-		self.defs.iter().find(|x| x.idx == idx)
-	}
-
-	fn def_by_name(&self, name: &str) -> Option<&ExtDef> {
-		self.defs.iter().find(|x| x.name == name)
-	}
-
-	fn bss_by_idx(&self, idx: u16) -> Option<&ExtBss> {
-		self.bss.iter().find(|x| x.idx == idx)
-	}
-
-	fn bss_by_name(&self, name: &str) -> Option<&ExtBss> {
-		self.bss.iter().find(|x| x.name == name)
-	}
-}
-
 pub struct ExtDef {
-	/// Symbol index.
-	idx: u16,
 	/// Offset into the section of symbol.
 	pub off: u32,
 	/// Symbol name.
@@ -143,8 +125,6 @@ impl Block {
 }
 
 pub struct ExtBss {
-	/// Symbol index.
-	idx: u16,
 	/// Size of BSS area, in bytes.
 	pub size: u32,
 	/// Symbol name.\
@@ -324,8 +304,7 @@ impl ObjectData {
 					let sec = out.secs.get_mut(&obtain_le(&head[2..]))
 					             .ok_or("Extdef for yet undefined section")?;
 
-					sec.defs.push(ExtDef {
-						idx,
+					sec.defs.insert(idx, ExtDef {
 						off,
 						name
 					});
@@ -385,8 +364,8 @@ impl ObjectData {
 						name,
 						blocks: Vec::new(),
 						patches: Vec::new(),
-						defs: Vec::new(),
-						bss: Vec::new(),
+						defs: HashMap::new(),
+						bss: HashMap::new(),
 						locs: Vec::new()
 					});
 
@@ -471,8 +450,7 @@ impl ObjectData {
 					let sec = out.secs.get_mut(&obtain_le(&head[2..]))
 								 .ok_or("Extbss for yet undefined section")?;
 
-					sec.bss.push(ExtBss {
-						idx,
+					sec.bss.insert(idx, ExtBss {
 						size,
 						name
 					});

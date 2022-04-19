@@ -69,7 +69,7 @@ impl LinkPat {
 
     pub fn section(sec: &Section, max_align: u8) -> Self {
         let patlen = sec.blocks.iter().map(Block::len).sum::<usize>()
-                   + sec.bss.iter().map(|b| b.size as usize).sum::<usize>();
+                   + sec.bss.values().map(|b| b.size as usize).sum::<usize>();
         let mut pat = Vec::with_capacity(patlen);
 
         for block in &sec.blocks {

@@ -141,13 +141,13 @@ pub fn main() -> iced::Result {
 
             for sec in file.secs.values() {
                 println!("\t\tsec: {}, size {}", sec.name, sec.blocks.iter().map(Block::len).sum::<usize>()
-                                                         + sec.bss.iter().map(|b| b.size as usize).sum::<usize>());
+                                                         + sec.bss.values().map(|b| b.size as usize).sum::<usize>());
 
-                for def in &sec.defs {
+                for def in sec.defs.values() {
                     println!("\t\t\tdef: {}, off: {}", def.name, def.off);
                 }
 
-                for bss in &sec.bss {
+                for bss in sec.bss.values() {
                     println!("\t\t\tbss: {}", bss.name);
                 }
             }
