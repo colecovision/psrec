@@ -35,7 +35,7 @@ impl Expr {
 		use Expr::*;
 
 		let (&expr, data) = data.split_first()
-			                    .ok_or("Truncated expr")?;
+		                        .ok_or("Truncated expr")?;
 
 		Ok(match expr {
 			0 => {
