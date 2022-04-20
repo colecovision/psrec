@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
-    front::{ObjectData, Section, Expr, PatchKind},
+    front::{ObjectData, Section},
     pattern::LinkPat,
     unif::{UnifyVar, UnifyState},
     util::{Diet, obtain_le}
@@ -17,7 +17,7 @@ pub fn extract_syms<F: Fn(&str) -> usize>(
     let mut syms = HashMap::new();
     let ext = (offset, offset + pat.len() as u32 - 1);
 
-    syms.insert(UnifyVar::Section(name, id), UnifyState::InRange(offset, 0));
+    syms.insert(UnifyVar::SecBase(name, id), UnifyState::InRange(offset, 0));
 
     for def in sec.defs.values() {
         syms.insert(UnifyVar::Symbol(def.name.clone()), UnifyState::InRange(offset + def.off, 0));
@@ -25,48 +25,11 @@ pub fn extract_syms<F: Fn(&str) -> usize>(
 
     for patch in &sec.patches {
         let off = patch.off as usize;
-        let q: u32 = obtain_le(pat.data()[off..].iter().map(|x| x.data));
+        // let q: u32 = obtain_le(pat.data()[off..].iter().map(|x| x.data));
         let w: u32 = obtain_le(&actual[off..]);
 
-        let (var, off) = match patch.expr {
-            Expr::SectionPlus(idx, off) => {
-                (UnifyVar::Section(name, sec_tl(&file.sec_by_idx(idx).unwrap().name)), off)
-            },
-            Expr::SymbolPlus(idx, off) => {
-                (UnifyVar::Symbol(file.sym_name_from_idx(idx).unwrap().to_string()), off)
-            },
-            Expr::SectionStart(idx) => {
-                (UnifyVar::SecStart(sec_tl(&file.sec_by_idx(idx).unwrap().name)), 0)
-            },
-            Expr::SectionBytes(idx) => {
-                (UnifyVar::SecSizeBytes(sec_tl(&file.sec_by_idx(idx).unwrap().name)), 0)
-            },
-            Expr::SectionEnd(idx) => {
-                (UnifyVar::SecEnd(sec_tl(&file.sec_by_idx(idx).unwrap().name)), 0)
-            },
-            _ => unimplemented!("what expr: {:?} for {:08X} => {:08X}; with offset {} ({:08X}) of {}/{}", patch.expr, q, w, patch.off, offset, name, id)
-        };
-
-        let val = match patch.kind {
-            PatchKind::Low28 => {
-                // eprintln!("patching {:?} at offset {} ({:08X}) with expr {:?}; original is {:08X}, found is {:08X}", patch.kind, patch.off, offset, patch.expr, q, w);
-                UnifyState::InRange((w << 2 & 0xFFFFFFC | offset + patch.off as u32 & 0xF0000000).wrapping_sub(off), 0)
-            },
-            PatchKind::Full => {
-                // eprintln!("patching {:?} at offset {} of {}/{} with expr {:?}; original is {:08X}, found is {:08X}", patch.kind, patch.off, name, sec.name, patch.expr, q, w);
-                UnifyState::InRange(w.wrapping_sub(off), 0)
-            },
-            PatchKind::Upper16 => {
-                // eprintln!("patching {:?} at offset {} with expr {:?}; original is {:08X}, found is {:08X}", patch.kind, patch.off, patch.expr, q, w);
-                UnifyState::InRange((w << 16).wrapping_sub(off).wrapping_sub(32768), 65535)
-            },
-            PatchKind::Lower16 => {
-                // eprintln!("patching {:?} at offset {} with expr {:?}; original is {:08X}, found is {:08X}", patch.kind, patch.off, patch.expr, q, w);
-                UnifyState::Lower16((w as u16).wrapping_sub(off as u16))
-            }
-        };
-
-        // eprintln!("{:?} =?= {:?}", var, val);
+        let (var, off) = patch.expr.as_var(name, file, &sec_tl);
+        let val = patch.kind.as_state(w, offset + patch.off as u32) - off;
 
         let sv = syms.entry(var).or_insert(val);
         *sv = sv.unify(val)?;

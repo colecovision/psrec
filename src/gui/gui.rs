@@ -58,7 +58,7 @@ fn instance_repr(inst: &Instance) -> String {
         },
         match uv {
             UnifyVar::Symbol(s) => s.clone(),
-            &UnifyVar::Section(obj, sec) => format!("{}/{}", unsafe { &OBJS[obj].0 }, unsafe { &SECS[sec] }),
+            &UnifyVar::SecBase(obj, sec) => format!("{}/{}", unsafe { &OBJS[obj].0 }, unsafe { &SECS[sec] }),
             &UnifyVar::SecStart(sec) => format!("_START({})", unsafe { &SECS[sec] }),
             &UnifyVar::SecSizeBytes(sec) => format!("_SIZEOF({})", unsafe { &SECS[sec] }),
             &UnifyVar::SecEnd(sec) => format!("_END({})", unsafe { &SECS[sec] }),
@@ -154,7 +154,7 @@ impl Application for MainGui {
                 let mut new_poss = Vec::new();
 
                 for inst in &poss {
-                    if let Some(pos) = inst.syms().get(&UnifyVar::Section(i, sec_check)) {
+                    if let Some(pos) = inst.syms().get(&UnifyVar::SecBase(i, sec_check)) {
                         let pos = match pos {
                             &UnifyState::InRange(x, 0) => x,
                             _ => unimplemented!("fuzzy rescan")
@@ -193,7 +193,7 @@ impl Application for MainGui {
                 for (k, v) in inst.syms() {
                     match k {
                         UnifyVar::Symbol(_) => (),
-                        UnifyVar::Section(_, name) => {
+                        UnifyVar::SecBase(_, name) => {
                             if let UnifyState::InRange(val, 0) = v {
                                 secdata.insert(*name, *val);
                             }
@@ -204,7 +204,7 @@ impl Application for MainGui {
                             }
                         },
                         UnifyVar::SecSizeBytes(_) => unimplemented!("check secsizebytes"),
-                        UnifyVar::SecEnd(name) => /* unimplemented!("check secend"), */ ()
+                        UnifyVar::SecEnd(_) => /* unimplemented!("check secend"), */ ()
                     }
                 }
 

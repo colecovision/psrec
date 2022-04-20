@@ -3,7 +3,10 @@ use std::{
     hint
 };
 
-use crate::util::obtain_le;
+use crate::{
+    util::obtain_le,
+    unif::UnifyState
+};
 use super::expr::Expr;
 
 pub struct ObjectData {
@@ -147,7 +150,7 @@ pub struct Patch {
 	pub expr: Expr
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum PatchKind {
 	Low28,
 	Full,
@@ -167,6 +170,25 @@ impl TryFrom<u8> for PatchKind {
 			_ => return Err(format!("Unknown patch kind: {:02X}", x))
         })
 	}
+}
+
+impl PatchKind {
+    pub fn as_state(self, patched: u32, offset: u32) -> UnifyState {
+        use UnifyState::*;
+
+        match self {
+            PatchKind::Low28 => InRange(
+                patched << 2 & 0xFFFFFFC | offset & 0xF0000000,
+                0
+            ),
+            PatchKind::Full => InRange(patched, 0),
+            PatchKind::Upper16 => InRange(
+                (patched << 16).wrapping_sub(32768),
+                65535
+            ),
+            PatchKind::Lower16 => Lower16(patched as u16)
+        }
+    }
 }
 
 macro_rules! check_size {

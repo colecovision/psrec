@@ -1,3 +1,5 @@
+use std::ops::{Add, Sub};
+
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 /// A symbolic variable whose value may be derived from either
 /// 1. the executable file structure or
@@ -8,7 +10,7 @@ pub enum UnifyVar {
     /// A section of a specific object file, as identified by its two indices
     /// (the former being the object file index and the latter the section
     /// index).
-    Section(usize, usize),
+    SecBase(usize, usize),
     /// The start of a section in the executable, as identified by its index.
     SecStart(usize),
     /// The size of a section in the executable, as identified by its index.
@@ -65,5 +67,26 @@ impl UnifyState {
                 }
             }
         }
+    }
+}
+
+impl Add<u32> for UnifyState {
+    type Output = Self;
+
+    fn add(self, x: u32) -> Self {
+        use UnifyState::*;
+
+        match self {
+            InRange(b, w) => InRange(b.wrapping_add(x), w),
+            Lower16(m) => Lower16(m.wrapping_add(x as u16))
+        }
+    }
+}
+
+impl Sub<u32> for UnifyState {
+    type Output = Self;
+
+    fn sub(self, x: u32) -> Self {
+        self.add(-(x as i32) as u32)
     }
 }

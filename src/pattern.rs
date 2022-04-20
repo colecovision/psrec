@@ -66,9 +66,11 @@ impl LinkPat {
         self.len() == 0
     }
 
+    /*
     pub fn data(&self) -> &[Mask] {
         &self.pat
     }
+    */
 
     pub fn section(sec: &Section, max_align: u8) -> Self {
         let patlen = sec.blocks.iter().map(Block::len).sum::<usize>()
