@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
-    hint
+    hint,
+    fmt
 };
 
 use crate::{
@@ -52,6 +53,7 @@ impl ObjectData {
 	}
 }
 
+#[derive(Copy, Clone)]
 pub enum Processor {
 	M68K, // 0
 	WDC65816, // 1
@@ -83,6 +85,25 @@ impl TryFrom<u8> for Processor {
 			_ => return Err(format!("Unknown processor: 0x{:02X}", x))
 		})
 	}
+}
+
+impl fmt::Display for Processor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use Processor::*;
+
+        write!(f, "{}", match self {
+            M68K => "Motorola 68000 family",
+            WDC65816 => "WDC 65816",
+            MOS6502 => "MOS 6502",
+            Z80 => "ZiLOG Z80",
+            SPC700 => "Sony SPC-700",
+            X86 => "Intel x86 family",
+            ARM => "ARM family",
+            R3K => "MIPS R3000",
+            SH => "Hitachi SuperH family",
+            R4K5K => "MIPS R4000 and R5000"
+        })
+    }
 }
 
 pub struct Section {

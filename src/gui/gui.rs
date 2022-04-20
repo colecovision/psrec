@@ -17,10 +17,9 @@ use iced::{
 };
 
 use crate::{
-    OBJS,
-    SECS,
     extract::{extract_syms, Instance},
-    front::{Executable, ObjectData},
+    front::Executable,
+    back::MatcherState,
     pattern::LinkPat,
     unif::{UnifyVar, UnifyState}
 };
@@ -30,7 +29,7 @@ use super::{
 };
 
 pub struct MainGui {
-    name: String,
+    state: Arc<MatcherState>,
     insts: Vec<Instance>,
     bv: BlockView,
     detail: Option<usize>,
@@ -41,13 +40,13 @@ pub struct MainGui {
     button: button::State
 }
 
-fn instance_repr(inst: &Instance) -> String {
+fn instance_repr(state: &MatcherState, inst: &Instance) -> String {
     let ranges = inst.exts().ranges().iter()
                      .map(|(s, e)| format!("\n∙ 0x{:08X}—0x{:08X}", s, e))
                      .collect::<String>();
 
     let incls = inst.incl().iter()
-                    .map(|&x| format!("\n∙ {}", unsafe { &OBJS[x].0 }))
+                    .map(|&x| format!("\n∙ {}", state.obj_name(x)))
                     .collect::<String>();
 
     let mut syms = inst.syms().iter().map(|(uv, us)| format!("{} {}",
@@ -58,10 +57,10 @@ fn instance_repr(inst: &Instance) -> String {
         },
         match uv {
             UnifyVar::Symbol(s) => s.clone(),
-            &UnifyVar::SecBase(obj, sec) => format!("{}/{}", unsafe { &OBJS[obj].0 }, unsafe { &SECS[sec] }),
-            &UnifyVar::SecStart(sec) => format!("_START({})", unsafe { &SECS[sec] }),
-            &UnifyVar::SecSizeBytes(sec) => format!("_SIZEOF({})", unsafe { &SECS[sec] }),
-            &UnifyVar::SecEnd(sec) => format!("_END({})", unsafe { &SECS[sec] }),
+            &UnifyVar::SecBase(obj, sec) => format!("{}/{}", state.obj_name(obj), state.sec_name(sec)),
+            &UnifyVar::SecStart(sec) => format!("_START({})", state.sec_name(sec)),
+            &UnifyVar::SecSizeBytes(sec) => format!("_SIZEOF({})", state.sec_name(sec)),
+            &UnifyVar::SecEnd(sec) => format!("_END({})", state.sec_name(sec))
         },
     )).collect::<Vec<_>>();
     syms.sort();
@@ -72,12 +71,12 @@ fn instance_repr(inst: &Instance) -> String {
 impl Application for MainGui {
     type Executor = executor::Default;
     type Message = GuiMessage;
-    type Flags = (String, Executable, u8);
+    type Flags = (MatcherState, Executable);
 
     fn new(flags: Self::Flags) -> (Self, Command<Self::Message>) {
         let exe = Arc::new(flags.1);
         let out = Self {
-            name: flags.0,
+            state: Arc::new(flags.0),
             insts: Vec::new(),
             bv: BlockView::new(),
             detail: None,
@@ -88,7 +87,10 @@ impl Application for MainGui {
             button: button::State::new()
         };
 
-        let run = move |(i, file): (usize, &ObjectData)| {
+        let state = out.state.clone();
+
+        let run = move |i: usize| {
+            let file = state.obj(i);
             let mut poss = Vec::with_capacity(1);
             let mut check_later = HashSet::new();
             let mut checked = HashSet::new();
@@ -97,11 +99,10 @@ impl Application for MainGui {
             incl.insert(i);
             poss.push(Instance::new(incl));
 
-            let sec_tl = |s: &str| unsafe { SECS.iter() }.position(|x| x == s)
-                                                         .unwrap();
+            let sec_tl = |s: &str| state.sec_idx(s).unwrap();
 
             for sec in file.secs.values() {
-                let pat = LinkPat::section(sec, flags.2);
+                let pat = LinkPat::section(sec, state.max_align);
                 let id = sec_tl(&sec.name);
 
                 if !pat.usable() {
@@ -160,8 +161,8 @@ impl Application for MainGui {
                             _ => unimplemented!("fuzzy rescan")
                         };
 
-                        let sec = file.sec_by_name(unsafe { &SECS[sec_check] }).unwrap();
-                        let pat = LinkPat::section(sec, flags.2);
+                        let sec = file.sec_by_name(state.sec_name(sec_check)).unwrap();
+                        let pat = LinkPat::section(sec, state.max_align);
                         let off = (pos - exe.text.0) as usize;
 
                         if off + pat.len() < exe.text.1.len() {
@@ -214,13 +215,13 @@ impl Application for MainGui {
             GuiMessage::Extracted(poss)
         };
 
-        (out, Command::batch((0..unsafe { OBJS.len() }).map(
-            |i| Command::perform(ready((i, unsafe { &OBJS[i].1 })), run.clone())
-        )))
+        let nob = out.state.num_objs();
+
+        (out, Command::batch((0..nob).map(|i| Command::perform(ready(i), run.clone()))))
     }
 
     fn title(&self) -> String {
-        format!("psrec - {}", self.name)
+        format!("psrec - {}", self.state.name)
     }
 
     fn update(&mut self, msg: Self::Message, clip: &mut Clipboard) -> Command<Self::Message> {
@@ -251,12 +252,12 @@ impl Application for MainGui {
                 if self.full.compatible(&self.insts[sel]) {
                     let obj = *self.insts[sel].incl().iter().next().unwrap();
 
-                    self.orphans.extend(unsafe { OBJS[obj].1.refs.values() }.filter_map(|r| {
+                    self.orphans.extend(self.state.obj(obj).refs.values().filter_map(|r| {
                         let real_r = r.trim_start_matches('\0');
                         (!self.defined.contains(real_r)).then(|| real_r.to_string())
                     }));
 
-                    for sec in unsafe { &OBJS[obj].1.secs }.values() {
+                    for sec in self.state.obj(obj).secs.values() {
                         sec.defs.values().for_each(|d| {
                             self.orphans.remove(&d.name);
                         });
@@ -291,7 +292,7 @@ impl Application for MainGui {
                 }
             },
             GuiMessage::Copy => {
-                clip.write(instance_repr(if let Some(det) = self.detail {
+                clip.write(instance_repr(&self.state, if let Some(det) = self.detail {
                     &self.insts[det]
                 } else {
                     &self.full
@@ -304,9 +305,9 @@ impl Application for MainGui {
 
     fn view(&mut self) -> Element<Self::Message> {
         let s = if let Some(det) = self.detail {
-            instance_repr(&self.insts[det])
+            instance_repr(&self.state, &self.insts[det])
         } else {
-            format!("== global selection ==\n{}", instance_repr(&self.full))
+            format!("== global selection ==\n{}", instance_repr(&self.state, &self.full))
         };
 
         let orph = self.orphans.iter().map(|s| format!(" {}", s)).collect::<String>();

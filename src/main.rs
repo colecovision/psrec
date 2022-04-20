@@ -3,29 +3,26 @@ use std::{fs, env};
 use iced::{Application, Settings};
 
 mod front;
+mod back;
 mod util;
 mod pattern;
 mod unif;
 mod extract;
 mod gui;
-use front::{Library, Processor, Executable, ObjectData, Block};
+use front::ParserState;
 use gui::MainGui;
 
-
-static mut OBJS: Vec<(String, ObjectData)> = Vec::new();
-static mut SECS: Vec<String> = Vec::new();
-
-
 pub fn main() -> iced::Result {
-    let mut exec = None;
     let mut args = env::args().skip(1);
     let mut max_align = u8::MAX;
     let mut no_dump = false;
 
+    let mut state = ParserState::default();
+
     while let Some(name) = args.next() {
         match name.as_str() {
             "-x" | "--executable" => {
-                if exec.is_some() {
+                if state.has_executable() {
                     eprintln!("Two executables provided, using the latter.");
                 }
 
@@ -45,11 +42,8 @@ pub fn main() -> iced::Result {
                     }
                 };
 
-                match Executable::parse(&data) {
-                    Ok(exe) => {
-                        println!("{} parsed OK!", name);
-                        exec = Some((name, exe));
-                    },
+                match state.parse_executable(&name, &data) {
+                    Ok(()) => println!("{} parsed OK!", name),
                     Err(e) => println!("Error while parsing {}: {}", name, e)
                 }
             },
@@ -71,11 +65,8 @@ pub fn main() -> iced::Result {
                     }
                 };
 
-                match ObjectData::parse(&data) {
-                    Ok(obj) => {
-                        println!("{} parsed OK!", name);
-                        unsafe { OBJS.push((name, obj)); }
-	                },
+                match state.parse_object(&name, &data) {
+                    Ok(()) => println!("{} parsed OK!", name),
                     Err(e) => println!("Error while parsing {}: {}", name, e)
                 }
             },
@@ -97,16 +88,8 @@ pub fn main() -> iced::Result {
                     }
                 };
 
-                match Library::parse(&data) {
-                    Ok(lib) => {
-                        println!("{} parsed OK!", name);
-
-                        unsafe { OBJS.extend(lib.files.into_iter()
-                                             .map(|file| (
-                            format!("{}/{}.OBJ", name, std::str::from_utf8(&file.name).unwrap().trim_end()),
-                            file.cont
-                        ))); }
-                    },
+                match state.parse_library(&name, &data) {
+                    Ok(()) => println!("{} parsed OK!", name),
                     Err(e) => println!("Error while parsing {}: {}", name, e)
                 }
             }
@@ -114,59 +97,11 @@ pub fn main() -> iced::Result {
     }
 
     if !no_dump {
-        for (name, file) in unsafe { OBJS.iter() } {
-            println!("\t{}", name);
-
-            println!("\t\tproc: {}", match file.proc {
-                None => "unspecified",
-                Some(Processor::M68K) => "Motorola 68000 family",
-                Some(Processor::WDC65816) => "WDC 65816",
-                Some(Processor::MOS6502) => "MOS 6502",
-                Some(Processor::Z80) => "ZiLOG Z80",
-                Some(Processor::SPC700) => "Sony SPC-700",
-                Some(Processor::X86) => "Intel x86 family",
-                Some(Processor::ARM) => "ARM family",
-                Some(Processor::R3K) => "MIPS R3000",
-                Some(Processor::SH) => "Hitachi SuperH family",
-                Some(Processor::R4K5K) => "MIPS R4000 and R5000"
-            });
-
-            for file in file.files.values() {
-                println!("\t\tsource: {}", file);
-            }
-
-            for extref in file.refs.values() {
-                println!("\t\textref: {}", extref);
-            }
-
-            for sec in file.secs.values() {
-                println!("\t\tsec: {}, size {}", sec.name, sec.blocks.iter().map(Block::len).sum::<usize>()
-                                                         + sec.bss.values().map(|b| b.size as usize).sum::<usize>());
-
-                for def in sec.defs.values() {
-                    println!("\t\t\tdef: {}, off: {}", def.name, def.off);
-                }
-
-                for bss in sec.bss.values() {
-                    println!("\t\t\tbss: {}", bss.name);
-                }
-            }
-        }
+        println!("{}", state);
     }
 
-    if let Some((name, exe)) = exec {
-        for (_, file) in unsafe { OBJS.iter() } {
-            for sec in file.secs.values() {
-                if unsafe { SECS.contains(&sec.name) } {
-                    continue;
-                }
-
-                unsafe { SECS.push(sec.name.clone()); }
-            }
-        }
-
-        MainGui::run(Settings::with_flags((name, exe, max_align)))
-    } else {
-        Ok(())
-    }
+    state.into_matcher(max_align).map_or(
+        Ok(()),
+        |se| MainGui::run(Settings::with_flags(se))
+    )
 }
