@@ -13,6 +13,8 @@ pub enum UnifyVar {
     SecStart(usize),
     /// The size of a section in the executable, as identified by its index.
     SecSizeBytes(usize),
+    /// The end of a section in the executable, as identified by its index.
+    SecEnd(usize)
 }
 
 #[derive(Copy, Clone, Debug)]

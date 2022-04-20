@@ -76,7 +76,7 @@ impl Expr {
 				(expr, data)
 			},
 			46 => {
-				let (expr, data) = if data.len() >= 8 && data[0] == 2 && data[3] == 0 {
+				if data.len() >= 8 && data[0] == 2 && data[3] == 0 {
 					let (edata, data) = data.split_at(8);
 					(SymbolMinus(obtain_le(&edata[1..]), obtain_le(&edata[4..])), data)
 				} else if data.len() >= 8 && data[0] == 0 && data[5] == 2 {
@@ -85,11 +85,12 @@ impl Expr {
 				} else if data.len() >= 6 && data[0] == 12 && data[3] == 22 && data[1..3] == data[4..6] {
 					let (edata, data) = data.split_at(6);
 					(SectionBytes(obtain_le(&edata[1..])), data)
-				} else {
+				} else if data.len() >= 8 && data[0] == 0 && data[5] == 4 {
+                    let (edata, data) = data.split_at(8);
+                    (SectionPlus(obtain_le(&edata[6..]), -obtain_le::<i32, 4, _, _>(&edata[1..]) as u32), data)
+                } else {
 					return Err("Unknown - expr in patch".to_string());
-				};
-
-				(expr, data)
+				}
 			},
 			50 => {
 				let (edata, data) = check_size!(data, 12, "/");

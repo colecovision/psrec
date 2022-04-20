@@ -60,7 +60,8 @@ fn instance_repr(inst: &Instance) -> String {
             UnifyVar::Symbol(s) => s.clone(),
             &UnifyVar::Section(obj, sec) => format!("{}/{}", unsafe { &OBJS[obj].0 }, unsafe { &SECS[sec] }),
             &UnifyVar::SecStart(sec) => format!("_START({})", unsafe { &SECS[sec] }),
-            &UnifyVar::SecSizeBytes(sec) => format!("_SIZEOF({})", unsafe { &SECS[sec] })
+            &UnifyVar::SecSizeBytes(sec) => format!("_SIZEOF({})", unsafe { &SECS[sec] }),
+            &UnifyVar::SecEnd(sec) => format!("_END({})", unsafe { &SECS[sec] }),
         },
     )).collect::<Vec<_>>();
     syms.sort();
@@ -202,7 +203,8 @@ impl Application for MainGui {
                                 advertised.insert(*name, *val);
                             }
                         },
-                        UnifyVar::SecSizeBytes(_) => unimplemented!("check secsizebytes")
+                        UnifyVar::SecSizeBytes(_) => unimplemented!("check secsizebytes"),
+                        UnifyVar::SecEnd(name) => /* unimplemented!("check secend"), */ ()
                     }
                 }
 

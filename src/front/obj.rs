@@ -355,8 +355,9 @@ impl ObjectData {
 					let (name, _rest) = _rest.split_at(len);
 					let name = String::from_utf8(Vec::from(name)).map_err(|_| "Invalid section name data".to_string())?;
 
-					out.sec_by_name(&name)
-					   .ok_or("Two sections with same name")?;
+                    if out.secs.values().any(|x| x.name == name) {
+                        return Err("Two sections with same name".to_string());
+                    }
 
 					out.secs.insert(idx, Section {
 						_grp: grp,

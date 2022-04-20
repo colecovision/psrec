@@ -41,6 +41,9 @@ pub fn extract_syms<F: Fn(&str) -> usize>(
             Expr::SectionBytes(idx) => {
                 (UnifyVar::SecSizeBytes(sec_tl(&file.sec_by_idx(idx).unwrap().name)), 0)
             },
+            Expr::SectionEnd(idx) => {
+                (UnifyVar::SecEnd(sec_tl(&file.sec_by_idx(idx).unwrap().name)), 0)
+            },
             _ => unimplemented!("what expr: {:?} for {:08X} => {:08X}; with offset {} ({:08X}) of {}/{}", patch.expr, q, w, patch.off, offset, name, id)
         };
 
