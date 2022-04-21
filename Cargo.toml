@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 iced = { version = "0.3", features = ["canvas"] }
+lasso = { version = "*" }

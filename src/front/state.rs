@@ -10,7 +10,6 @@ use super::{
 #[derive(Default)]
 pub struct ParserState {
     objs: Vec<(String, ObjectData)>,
-    secs: Vec<String>,
     exe: Option<(String, Executable)>
 }
 
@@ -27,30 +26,12 @@ impl ParserState {
 
     pub fn parse_object(&mut self, name: &str, data: &[u8]) -> Result<(), String> {
         ObjectData::parse(data).map(|obj| {
-            for sec in obj.secs.values() {
-                if self.secs.contains(&sec.name) {
-                    continue;
-                }
-
-                self.secs.push(sec.name.clone());
-            }
-
             self.objs.push((name.to_string(), obj));
         })
     }
 
     pub fn parse_library(&mut self, name: &str, data: &[u8]) -> Result<(), String> {
         Library::parse(data).map(|lib| {
-            for file in lib.files.iter() {
-                for sec in file.cont.secs.values() {
-                    if self.secs.contains(&sec.name) {
-                        continue;
-                    }
-
-                    self.secs.push(sec.name.clone());
-                }
-            }
-
             self.objs.extend(lib.files.into_iter().map(|file| (
                 format!("{}/{}.OBJ", name, std::str::from_utf8(&file.name).unwrap().trim_end()),
                 file.cont
@@ -60,7 +41,7 @@ impl ParserState {
 
     pub fn into_matcher(self, max_align: u8) -> Option<(MatcherState, Executable)> {
         self.exe.map(|(name, exe)| (
-            MatcherState { objs: self.objs, secs: self.secs, name, max_align },
+            MatcherState::new(self.objs, name, max_align),
             exe
         ))
     }

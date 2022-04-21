@@ -1,5 +1,7 @@
 use std::ops::{Add, Sub};
 
+use lasso::Spur;
+
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 /// A symbolic variable whose value may be derived from either
 /// 1. the executable file structure or
@@ -10,13 +12,13 @@ pub enum UnifyVar {
     /// A section of a specific object file, as identified by its two indices
     /// (the former being the object file index and the latter the section
     /// index).
-    SecBase(usize, usize),
+    SecBase(usize, Spur),
     /// The start of a section in the executable, as identified by its index.
-    SecStart(usize),
+    SecStart(Spur),
     /// The size of a section in the executable, as identified by its index.
-    SecSizeBytes(usize),
+    SecSizeBytes(Spur),
     /// The end of a section in the executable, as identified by its index.
-    SecEnd(usize)
+    SecEnd(Spur)
 }
 
 #[derive(Copy, Clone, Debug)]

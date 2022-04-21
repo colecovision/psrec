@@ -1,5 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
+use lasso::{Reader, Spur};
+
 use crate::{
     front::{ObjectData, Section},
     pattern::LinkPat,
@@ -7,12 +9,12 @@ use crate::{
     util::{Diet, obtain_le}
 };
 
-pub fn extract_syms<F: Fn(&str) -> usize>(
+pub fn extract_syms<R: Reader>(
     offset: u32,
     actual: &[u8], pat: &LinkPat,
     sec: &Section, file: &ObjectData,
-    id: usize, name: usize,
-    sec_tl: F
+    id: Spur, name: usize,
+    rodeo: &R
 ) -> Option<((u32, u32), HashMap<UnifyVar, UnifyState>)> {
     let mut syms = HashMap::new();
     let ext = (offset, offset + pat.len() as u32 - 1);
@@ -28,7 +30,7 @@ pub fn extract_syms<F: Fn(&str) -> usize>(
         // let q: u32 = obtain_le(pat.data()[off..].iter().map(|x| x.data));
         let w: u32 = obtain_le(&actual[off..]);
 
-        let (var, off) = patch.expr.as_var(name, file, &sec_tl);
+        let (var, off) = patch.expr.as_var(name, file, rodeo);
         let val = patch.kind.as_state(w, offset + patch.off as u32) - off;
 
         let sv = syms.entry(var).or_insert(val);

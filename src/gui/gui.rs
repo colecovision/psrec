@@ -57,10 +57,10 @@ fn instance_repr(state: &MatcherState, inst: &Instance) -> String {
         },
         match uv {
             UnifyVar::Symbol(s) => s.clone(),
-            &UnifyVar::SecBase(obj, sec) => format!("{}/{}", state.obj_name(obj), state.sec_name(sec)),
-            &UnifyVar::SecStart(sec) => format!("_START({})", state.sec_name(sec)),
-            &UnifyVar::SecSizeBytes(sec) => format!("_SIZEOF({})", state.sec_name(sec)),
-            &UnifyVar::SecEnd(sec) => format!("_END({})", state.sec_name(sec))
+            &UnifyVar::SecBase(obj, sec) => format!("{}/{}", state.obj_name(obj), state.secs.resolve(&sec)),
+            &UnifyVar::SecStart(sec) => format!("_START({})", state.secs.resolve(&sec)),
+            &UnifyVar::SecSizeBytes(sec) => format!("_SIZEOF({})", state.secs.resolve(&sec)),
+            &UnifyVar::SecEnd(sec) => format!("_END({})", state.secs.resolve(&sec))
         },
     )).collect::<Vec<_>>();
     syms.sort();
@@ -99,11 +99,9 @@ impl Application for MainGui {
             incl.insert(i);
             poss.push(Instance::new(incl));
 
-            let sec_tl = |s: &str| state.sec_idx(s).unwrap();
-
             for sec in file.secs.values() {
                 let pat = LinkPat::section(sec, state.max_align);
-                let id = sec_tl(&sec.name);
+                let id = state.secs.get(&sec.name).unwrap();
 
                 if !pat.usable() {
                     if !pat.is_empty() {
@@ -118,7 +116,7 @@ impl Application for MainGui {
                 for (e, s) in pat.find(&exe.text.1).filter_map(
                     |pos| extract_syms(exe.text.0 + pos as u32,
                                        &exe.text.1[pos..pos + pat.len()],
-                                       &pat, sec, file, id, i, sec_tl)
+                                       &pat, sec, file, id, i, &state.secs)
                 ) {
                     for ins in &poss {
                         let mut ins = ins.clone();
@@ -142,7 +140,7 @@ impl Application for MainGui {
             }
 
             println!("object {}: {} instances; check {}", i, poss.len(),
-                     check_later.iter().copied().map(|x| format!("{}", x))
+                     check_later.iter().map(|x| state.secs.resolve(x))
                                        .collect::<Vec<_>>().join(" "));
 
             for sec_check in check_later.iter().copied().cycle() {
@@ -161,12 +159,12 @@ impl Application for MainGui {
                             _ => unimplemented!("fuzzy rescan")
                         };
 
-                        let sec = file.sec_by_name(state.sec_name(sec_check)).unwrap();
+                        let sec = file.sec_by_name(state.secs.resolve(&sec_check)).unwrap();
                         let pat = LinkPat::section(sec, state.max_align);
                         let off = (pos - exe.text.0) as usize;
 
                         if off + pat.len() < exe.text.1.len() {
-                            if let Some((e, s)) = extract_syms(pos, &exe.text.1[off .. off + pat.len()], &pat, sec, file, sec_check, i, sec_tl) {
+                            if let Some((e, s)) = extract_syms(pos, &exe.text.1[off .. off + pat.len()], &pat, sec, file, sec_check, i, &state.secs) {
                                 let mut ins = inst.clone();
 
                                 if ins.insert(e, s) {
@@ -187,8 +185,8 @@ impl Application for MainGui {
                 }
             }
 
-            let mut secdata = HashMap::<usize, u32>::new();
-            let mut advertised = HashMap::<usize, u32>::new();
+            let mut secdata = HashMap::new();
+            let mut advertised = HashMap::new();
 
             poss.retain(|inst| {
                 for (k, v) in inst.syms() {
