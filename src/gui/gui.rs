@@ -15,6 +15,7 @@ use iced::{
     Length, Row, Scrollable,
     Text
 };
+use lasso::Spur;
 
 use crate::{
     extract::{extract_syms, Instance},
@@ -34,8 +35,8 @@ pub struct MainGui {
     bv: BlockView,
     detail: Option<usize>,
     full: Instance,
-    defined: HashSet<String>,
-    orphans: HashSet<String>,
+    defined: HashSet<Spur>,
+    orphans: HashSet<Spur>,
     scroll: scrollable::State,
     button: button::State
 }
@@ -56,11 +57,11 @@ fn instance_repr(state: &MatcherState, inst: &Instance) -> String {
             UnifyState::Lower16(y) => format!("0x????{:04X}", y)
         },
         match uv {
-            UnifyVar::Symbol(s) => s.clone(),
-            &UnifyVar::SecBase(obj, sec) => format!("{}/{}", state.obj_name(obj), state.secs.resolve(&sec)),
-            &UnifyVar::SecStart(sec) => format!("_START({})", state.secs.resolve(&sec)),
-            &UnifyVar::SecSizeBytes(sec) => format!("_SIZEOF({})", state.secs.resolve(&sec)),
-            &UnifyVar::SecEnd(sec) => format!("_END({})", state.secs.resolve(&sec))
+            UnifyVar::Symbol(s) => state.strings.resolve(&s).to_string(),
+            &UnifyVar::SecBase(obj, sec) => format!("{}/{}", state.obj_name(obj), state.strings.resolve(&sec)),
+            &UnifyVar::SecStart(sec) => format!("_START({})", state.strings.resolve(&sec)),
+            &UnifyVar::SecSizeBytes(sec) => format!("_SIZEOF({})", state.strings.resolve(&sec)),
+            &UnifyVar::SecEnd(sec) => format!("_END({})", state.strings.resolve(&sec))
         },
     )).collect::<Vec<_>>();
     syms.sort();
@@ -101,11 +102,10 @@ impl Application for MainGui {
 
             for sec in file.secs.values() {
                 let pat = LinkPat::section(sec, state.max_align);
-                let id = state.secs.get(&sec.name).unwrap();
 
                 if !pat.usable() {
                     if !pat.is_empty() {
-                        check_later.insert(id);
+                        check_later.insert(sec.name);
                     }
 
                     continue;
@@ -116,7 +116,7 @@ impl Application for MainGui {
                 for (e, s) in pat.find(&exe.text.1).filter_map(
                     |pos| extract_syms(exe.text.0 + pos as u32,
                                        &exe.text.1[pos..pos + pat.len()],
-                                       &pat, sec, file, id, i, &state.secs)
+                                       &pat, sec, file, sec.name, i)
                 ) {
                     for ins in &poss {
                         let mut ins = ins.clone();
@@ -140,7 +140,7 @@ impl Application for MainGui {
             }
 
             println!("object {}: {} instances; check {}", i, poss.len(),
-                     check_later.iter().map(|x| state.secs.resolve(x))
+                     check_later.iter().map(|x| state.strings.resolve(x))
                                        .collect::<Vec<_>>().join(" "));
 
             for sec_check in check_later.iter().copied().cycle() {
@@ -159,12 +159,12 @@ impl Application for MainGui {
                             _ => unimplemented!("fuzzy rescan")
                         };
 
-                        let sec = file.sec_by_name(state.secs.resolve(&sec_check)).unwrap();
+                        let sec = file.sec_by_name(sec_check).unwrap();
                         let pat = LinkPat::section(sec, state.max_align);
                         let off = (pos - exe.text.0) as usize;
 
                         if off + pat.len() < exe.text.1.len() {
-                            if let Some((e, s)) = extract_syms(pos, &exe.text.1[off .. off + pat.len()], &pat, sec, file, sec_check, i, &state.secs) {
+                            if let Some((e, s)) = extract_syms(pos, &exe.text.1[off .. off + pat.len()], &pat, sec, file, sec_check, i) {
                                 let mut ins = inst.clone();
 
                                 if ins.insert(e, s) {
@@ -251,20 +251,23 @@ impl Application for MainGui {
                     let obj = *self.insts[sel].incl().iter().next().unwrap();
 
                     self.orphans.extend(self.state.obj(obj).refs.values().filter_map(|r| {
-                        let real_r = r.trim_start_matches('\0');
-                        (!self.defined.contains(real_r)).then(|| real_r.to_string())
+                        let real_r = self.state.strings.get(
+                            self.state.strings.resolve(&r)
+                                              .trim_start_matches('\0')
+                        ).unwrap();
+                        (!self.defined.contains(&real_r)).then(|| real_r)
                     }));
 
                     for sec in self.state.obj(obj).secs.values() {
                         sec.defs.values().for_each(|d| {
                             self.orphans.remove(&d.name);
                         });
-                        self.defined.extend(sec.defs.values().map(|d| d.name.clone()));
+                        self.defined.extend(sec.defs.values().map(|d| d.name));
 
                         sec.bss.values().for_each(|b| {
                             self.orphans.remove(&b.name);
                         });
-                        self.defined.extend(sec.bss.values().map(|b| b.name.clone()));
+                        self.defined.extend(sec.bss.values().map(|b| b.name));
                     }
 
                     self.full.join(self.insts[sel].clone());
@@ -308,7 +311,9 @@ impl Application for MainGui {
             format!("== global selection ==\n{}", instance_repr(&self.state, &self.full))
         };
 
-        let orph = self.orphans.iter().map(|s| format!(" {}", s)).collect::<String>();
+        let orph = self.orphans.iter()
+                               .map(|s| format!(" {}", self.state.strings.resolve(s)))
+                               .collect::<String>();
 
         Row::new()
             .push(Canvas::new(&mut self.bv)

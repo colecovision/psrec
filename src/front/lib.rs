@@ -1,3 +1,7 @@
+use std::str;
+
+use lasso::{Interner, Spur};
+
 use super::obj::ObjectData;
 use crate::util::obtain_le;
 
@@ -9,7 +13,7 @@ pub struct Library {
 }
 
 impl Library {
-	pub fn parse(data: &[u8]) -> Result<Self, String> {
+	pub fn parse<I: Interner>(data: &[u8], rodeo: &mut I) -> Result<Self, String> {
 		if data.len() < 4 {
 			return Err("File too short to be library".to_string());
 		}
@@ -23,7 +27,7 @@ impl Library {
 		let mut out = Self { files: Vec::new() };
 
 		while !rest.is_empty() {
-			let (file, _rest) = ObjectFile::parse(rest)?;
+			let (file, _rest) = ObjectFile::parse(rest, rodeo)?;
 			out.files.push(file);
 			rest = _rest;
 		}
@@ -38,13 +42,13 @@ pub struct ObjectFile {
 	/// DOS date and time (modification time).
 	_stamp: u32,
 	/// List of externally visible symbols defined in this file.
-	_syms: Vec<String>,
+	_syms: Vec<Spur>,
 	/// Actual linker object.
 	pub cont: ObjectData
 }
 
 impl ObjectFile {
-	fn parse(data: &[u8]) -> Result<(Self, &[u8]), String> {
+	fn parse<'a, I: Interner>(data: &'a [u8], rodeo: &'_ mut I) -> Result<(Self, &'a [u8]), String> {
 		if data.len() < 20 {
 			return Err("Archived file too short to be object file".to_string());
 		}
@@ -83,7 +87,7 @@ impl ObjectFile {
 				}
 
 				let (sym, _raw_syms) = _raw_syms.split_at(len);
-				syms.push(String::from_utf8(Vec::from(sym)).map_err(|_| "Invalid symbol data".to_string())?);
+				syms.push(rodeo.get_or_intern(str::from_utf8(sym).map_err(|_| "Invalid symbol data")?));
 				raw_syms = _raw_syms;
 			} else {
 				return Err("Symbol area was truncated".to_string());
@@ -94,7 +98,7 @@ impl ObjectFile {
 			name: header[0..8].try_into().unwrap(),
 			_stamp: obtain_le(&header[8..]),
 			_syms: syms,
-			cont: ObjectData::parse(file)?
+			cont: ObjectData::parse(file, rodeo)?
 		}, rest))
 	}
 }

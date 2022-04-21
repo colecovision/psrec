@@ -1,12 +1,15 @@
 use std::{
     collections::HashMap,
     hint,
-    fmt
+    fmt,
+    str
 };
+
+use lasso::{Interner, Spur};
 
 use crate::{
     util::obtain_le,
-    unif::UnifyState
+    unif::UnifyState,
 };
 use super::expr::Expr;
 
@@ -19,7 +22,7 @@ pub struct ObjectData {
 	/// Map from section indices to sections present in the object file.
 	pub secs: HashMap<u16, Section>,
 	/// Map from symbol indices to external references to symbols.
-	pub refs: HashMap<u16, String>,
+	pub refs: HashMap<u16, Spur>,
 	/// Map from file indices to files that contributed to this object.
 	pub files: HashMap<u16, String>,
 }
@@ -29,7 +32,7 @@ impl ObjectData {
         self.secs.get(&idx)
 	}
 
-	pub fn sec_by_name(&self, name: &str) -> Option<&Section> {
+	pub fn sec_by_name(&self, name: Spur) -> Option<&Section> {
 		self.secs.values().filter(|x| x.name == name).next()
 	}
 
@@ -39,17 +42,17 @@ impl ObjectData {
 	    || self.secs.values().any(|x| x.bss.contains_key(&idx))
 	}
 
-	fn has_sym_by_name(&self, name: &str) -> bool {
-		   self.refs.values().any(|x| x == name)
+	fn has_sym_by_name(&self, name: Spur) -> bool {
+		   self.refs.values().any(|x| x == &name)
         || self.secs.values().any(|x| x.defs.values().any(|x| x.name == name))
 	    || self.secs.values().any(|x| x.bss.values().any(|x| x.name == name))
 	}
 
-	pub fn sym_name_from_idx(&self, idx: u16) -> Option<&str> {
-	    self.refs.get(&idx).or_else(||
-	        self.secs.values().find_map(|x| x.defs.get(&idx).map(|x| &x.name)
-	                             .or_else(|| x.bss.get(&idx).map(|x| &x.name)))
-	    ).map(|x| x.as_str())
+	pub fn sym_name_from_idx(&self, idx: u16) -> Option<Spur> {
+	    self.refs.get(&idx).copied().or_else(||
+	        self.secs.values().find_map(|x| x.defs.get(&idx).map(|x| x.name)
+	                          .or_else(|| x.bss.get(&idx).map(|x| x.name)))
+	    )
 	}
 }
 
@@ -112,7 +115,7 @@ pub struct Section {
 	/// Section alignment, in bytes.
 	pub align: u8,
 	/// Section name.
-	pub name: String,
+	pub name: Spur,
 	/// List of blocks in section.
 	pub blocks: Vec<Block>,
 	/// List of patches for section.
@@ -129,7 +132,7 @@ pub struct ExtDef {
 	/// Offset into the section of symbol.
 	pub off: u32,
 	/// Symbol name.
-	pub name: String
+	pub name: Spur
 }
 
 pub enum Block {
@@ -151,15 +154,15 @@ impl Block {
 pub struct ExtBss {
 	/// Size of BSS area, in bytes.
 	pub size: u32,
-	/// Symbol name.\
-	pub name: String
+	/// Symbol name.
+	pub name: Spur
 }
 
 struct LocDef {
 	/// Offset into the section of symbol.
 	_off: u32,
 	/// Symbol name.
-	_name: String
+	_name: Spur
 }
 
 pub struct Patch {
@@ -220,7 +223,7 @@ macro_rules! check_size {
 }
 
 impl ObjectData {
-    pub fn parse(data: &[u8]) -> Result<ObjectData, String> {
+    pub fn parse<I: Interner>(data: &[u8], rodeo: &mut I) -> Result<ObjectData, String> {
         if data.len() < 4 {
             return Err("File area too short to be an object".to_string());
         }
@@ -338,9 +341,9 @@ impl ObjectData {
 					}
 
 					let (name, _rest) = _rest.split_at(len);
-					let name = String::from_utf8(Vec::from(name)).map_err(|_| "Invalid extdef name data".to_string())?;
+					let name = rodeo.get_or_intern(str::from_utf8(name).map_err(|_| "Invalid extdef name data")?);
 
-					if out.has_sym_by_name(&name) {
+					if out.has_sym_by_name(name) {
 						return Err("Two symbols with same name".to_string());
 					}
 
@@ -369,9 +372,9 @@ impl ObjectData {
 					}
 
 					let (name, _rest) = _rest.split_at(len);
-					let name = String::from_utf8(Vec::from(name)).map_err(|_| "Invalid extref name data".to_string())?;
+					let name = rodeo.get_or_intern(str::from_utf8(name).map_err(|_| "Invalid extref name data")?);
 
-					if out.has_sym_by_name(&name) {
+					if out.has_sym_by_name(name) {
 						return Err("Two symbols with same name".to_string());
 					}
 
@@ -396,7 +399,7 @@ impl ObjectData {
 					}
 
 					let (name, _rest) = _rest.split_at(len);
-					let name = String::from_utf8(Vec::from(name)).map_err(|_| "Invalid section name data".to_string())?;
+					let name = rodeo.get_or_intern(str::from_utf8(name).map_err(|_| "Invalid section name data")?);
 
                     if out.secs.values().any(|x| x.name == name) {
                         return Err("Two sections with same name".to_string());
@@ -426,7 +429,7 @@ impl ObjectData {
 					}
 
 					let (name, _rest) = _rest.split_at(len);
-					let name = String::from_utf8(Vec::from(name)).map_err(|_| "Invalid locdef name data".to_string())?;
+					let name = rodeo.get_or_intern(str::from_utf8(name).map_err(|_| "Invalid locdef name data")?);
 
 					let sec = out.secs.get_mut(&obtain_le(head))
 					             .ok_or("Locdef for yet undefined section")?;
@@ -485,9 +488,9 @@ impl ObjectData {
 					}
 
 					let (name, _rest) = _rest.split_at(len);
-					let name = String::from_utf8(Vec::from(name)).map_err(|_| "Invalid extbss name data")?;
+					let name = rodeo.get_or_intern(str::from_utf8(name).map_err(|_| "Invalid extbss name data")?);
 
-					if out.has_sym_by_name(&name) {
+					if out.has_sym_by_name(name) {
 						return Err("Two symbols with same name".to_string());
 					}
 

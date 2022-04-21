@@ -1,5 +1,3 @@
-use lasso::Reader;
-
 use crate::{
     util::obtain_le,
     unif::UnifyVar
@@ -98,7 +96,7 @@ impl Expr {
         Ok((Self(out), data))
     }
 
-    pub fn as_var<R: Reader>(&self, name: usize, file: &ObjectData, rodeo: &R) -> (UnifyVar, u32) {
+    pub fn as_var(&self, name: usize, file: &ObjectData) -> (UnifyVar, u32) {
         let mut stack = Vec::new();
 
         use UnifyVar::*;
@@ -107,16 +105,16 @@ impl Expr {
             match token {
                 ExprToken::Literal(lit) => stack.push((None, lit)),
                 ExprToken::Symbol(idx) => stack.push((Some(
-                    Symbol(file.sym_name_from_idx(idx).unwrap().to_string())
+                    Symbol(file.sym_name_from_idx(idx).unwrap())
                 ), 0)),
                 ExprToken::SectionBase(idx) => stack.push((Some(
-                    SecBase(name, rodeo.get(&file.sec_by_idx(idx).unwrap().name).unwrap())
+                    SecBase(name, file.sec_by_idx(idx).unwrap().name)
                 ), 0)),
                 ExprToken::SectionStart(idx) => stack.push((Some(
-                    SecStart(rodeo.get(&file.sec_by_idx(idx).unwrap().name).unwrap())
+                    SecStart(file.sec_by_idx(idx).unwrap().name)
                 ), 0)),
                 ExprToken::SectionEnd(idx) => stack.push((Some(
-                    SecEnd(rodeo.get(&file.sec_by_idx(idx).unwrap().name).unwrap())
+                    SecEnd(file.sec_by_idx(idx).unwrap().name)
                 ), 0)),
                 ExprToken::Add => {
                     let (sec, o2) = stack.pop().unwrap();

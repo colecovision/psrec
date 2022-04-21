@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use lasso::{Reader, Spur};
+use lasso::Spur;
 
 use crate::{
     front::{ObjectData, Section},
@@ -9,20 +9,14 @@ use crate::{
     util::{Diet, obtain_le}
 };
 
-pub fn extract_syms<R: Reader>(
-    offset: u32,
-    actual: &[u8], pat: &LinkPat,
-    sec: &Section, file: &ObjectData,
-    id: Spur, name: usize,
-    rodeo: &R
-) -> Option<((u32, u32), HashMap<UnifyVar, UnifyState>)> {
+pub fn extract_syms(offset: u32, actual: &[u8], pat: &LinkPat, sec: &Section, file: &ObjectData, id: Spur, name: usize) -> Option<((u32, u32), HashMap<UnifyVar, UnifyState>)> {
     let mut syms = HashMap::new();
     let ext = (offset, offset + pat.len() as u32 - 1);
 
     syms.insert(UnifyVar::SecBase(name, id), UnifyState::InRange(offset, 0));
 
     for def in sec.defs.values() {
-        syms.insert(UnifyVar::Symbol(def.name.clone()), UnifyState::InRange(offset + def.off, 0));
+        syms.insert(UnifyVar::Symbol(def.name), UnifyState::InRange(offset + def.off, 0));
     }
 
     for patch in &sec.patches {
@@ -30,7 +24,7 @@ pub fn extract_syms<R: Reader>(
         // let q: u32 = obtain_le(pat.data()[off..].iter().map(|x| x.data));
         let w: u32 = obtain_le(&actual[off..]);
 
-        let (var, off) = patch.expr.as_var(name, file, rodeo);
+        let (var, off) = patch.expr.as_var(name, file);
         let val = patch.kind.as_state(w, offset + patch.off as u32) - off;
 
         let sv = syms.entry(var).or_insert(val);

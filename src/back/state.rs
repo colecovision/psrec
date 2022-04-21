@@ -4,24 +4,16 @@ use lasso::{Rodeo, RodeoReader};
 
 pub struct MatcherState {
     pub objs: Vec<(String, ObjectData)>,
-    pub secs: RodeoReader,
+    pub strings: RodeoReader,
     pub name: String,
     pub max_align: u8
 }
 
 impl MatcherState {
-    pub fn new(objs: Vec<(String, ObjectData)>, name: String, max_align: u8) -> Self {
-        let mut rodeo = Rodeo::new();
-
-        for (_, obj) in &objs {
-            for sec in obj.secs.values() {
-                rodeo.get_or_intern(&sec.name);
-            }
-        }
-
+    pub fn new(objs: Vec<(String, ObjectData)>, strings: Rodeo, name: String, max_align: u8) -> Self {
         Self {
             objs,
-            secs: rodeo.into_reader(),
+            strings: strings.into_reader(),
             name,
             max_align
         }

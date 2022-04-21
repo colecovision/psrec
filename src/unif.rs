@@ -8,7 +8,7 @@ use lasso::Spur;
 /// 2. data stored inside the executable.
 pub enum UnifyVar {
     /// A symbol, as identified by its name.
-    Symbol(String),
+    Symbol(Spur),
     /// A section of a specific object file, as identified by its two indices
     /// (the former being the object file index and the latter the section
     /// index).

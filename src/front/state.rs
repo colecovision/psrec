@@ -1,5 +1,7 @@
 use std::fmt;
 
+use lasso::Rodeo;
+
 use crate::back::MatcherState;
 use super::{
     obj::{ObjectData, Block},
@@ -10,7 +12,8 @@ use super::{
 #[derive(Default)]
 pub struct ParserState {
     objs: Vec<(String, ObjectData)>,
-    exe: Option<(String, Executable)>
+    exe: Option<(String, Executable)>,
+    strings: Rodeo
 }
 
 impl ParserState {
@@ -25,13 +28,13 @@ impl ParserState {
     }
 
     pub fn parse_object(&mut self, name: &str, data: &[u8]) -> Result<(), String> {
-        ObjectData::parse(data).map(|obj| {
+        ObjectData::parse(data, &mut self.strings).map(|obj| {
             self.objs.push((name.to_string(), obj));
         })
     }
 
     pub fn parse_library(&mut self, name: &str, data: &[u8]) -> Result<(), String> {
-        Library::parse(data).map(|lib| {
+        Library::parse(data, &mut self.strings).map(|lib| {
             self.objs.extend(lib.files.into_iter().map(|file| (
                 format!("{}/{}.OBJ", name, std::str::from_utf8(&file.name).unwrap().trim_end()),
                 file.cont
@@ -41,7 +44,7 @@ impl ParserState {
 
     pub fn into_matcher(self, max_align: u8) -> Option<(MatcherState, Executable)> {
         self.exe.map(|(name, exe)| (
-            MatcherState::new(self.objs, name, max_align),
+            MatcherState::new(self.objs, self.strings, name, max_align),
             exe
         ))
     }
@@ -64,19 +67,24 @@ impl fmt::Display for ParserState {
                 write!(f, "\n\tsource: {}", file)?;
             }
             for extref in file.refs.values() {
-                write!(f, "\n\textref: {}", extref)?;
+                write!(f, "\n\textref: {}", self.strings.resolve(&extref))?;
             }
 
             for sec in file.secs.values() {
-                write!(f, "\n\tsec: {}, size {}", sec.name, sec.blocks.iter().map(Block::len).sum::<usize>()
-                                                          + sec.bss.values().map(|b| b.size as usize).sum::<usize>())?;
+                write!(f, "\n\tsec: {}, size {}",
+                       self.strings.resolve(&sec.name),
+                       sec.blocks.iter().map(Block::len).sum::<usize>()
+                       + sec.bss.values().map(|b| b.size as usize).sum::<usize>())?;
 
                 for def in sec.defs.values() {
-                    write!(f, "\n\t\tdef: {}, off: {}", def.name, def.off)?;
+                    write!(f, "\n\t\tdef: {}, off: {}",
+                           self.strings.resolve(&def.name),
+                           def.off)?;
                 }
 
                 for bss in sec.bss.values() {
-                    write!(f, "\n\t\tbss: {}", bss.name)?;
+                    write!(f, "\n\t\tbss: {}",
+                           self.strings.resolve(&bss.name))?;
                 }
             }
         }
